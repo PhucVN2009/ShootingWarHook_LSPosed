@@ -12,14 +12,11 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
-
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
     compileOptions {
@@ -29,9 +26,6 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.11.0'
-    
-    // Xposed API cho GitHub Build
+    // Chỉ giữ lại Xposed API, loại bỏ AppCompat và Material để build nhanh và ổn định hơn
     compileOnly 'de.robv.android.xposed:api:82'
 }
