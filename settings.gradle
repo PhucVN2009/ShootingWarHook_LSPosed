@@ -10,6 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Thêm repository của Xposed
+        maven { url 'https://api.xposed.info/' }
     }
 }
 rootProject.name = "ShootingWarHookProject"
