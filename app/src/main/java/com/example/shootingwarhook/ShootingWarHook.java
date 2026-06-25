@@ -1,5 +1,6 @@
 package com.example.shootingwarhook;
 
+import static de.robv.android.xposed.XposedHelpers.findAndHookConstructor;
 import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
 
 import org.json.JSONObject;
@@ -12,66 +13,73 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
 public class ShootingWarHook implements IXposedHookLoadPackage {
 
     private static final String TARGET_PACKAGE = "com.garena.game.kgvn";
-    private static final String TARGET_HOST = "shootingwar.lienquan.garena.vn";
-    private static final String TARGET_PATH = "/api/app/param";
 
     @Override
     public void handleLoadPackage(final LoadPackageParam lpparam) throws Throwable {
+        // Luôn log để biết module đã được nạp vào tiến trình nào
+        XposedBridge.log("ShootingWarHook: Đang kiểm tra tiến trình: " + lpparam.processName);
+
         if (!lpparam.packageName.equals(TARGET_PACKAGE)) {
             return;
         }
 
-        XposedBridge.log("ShootingWarHook: Loaded for " + lpparam.packageName);
+        XposedBridge.log("ShootingWarHook: Đã nạp thành công vào Liên Quân Mobile!");
 
-        // Hook OkHttp3 if used, or WebView's response handling
-        // Based on the HAR, it seems to be a WebView-based game or using standard networking.
-        // We will hook common networking libraries or WebView client.
-        
-        // Hooking OkHttp3 Interceptor is a common way to modify responses.
-        // However, since we don't know the exact networking library, 
-        // a more generic way is to hook the JSON parsing or the response callback.
-        
-        // For this specific request, let's try to hook common JSON constructors 
-        // or networking response handlers.
-        
+        // Kỹ thuật 1: Hook vào Constructor của JSONObject (Hiệu quả nhất khi game nhận dữ liệu từ server)
+        try {
+            findAndHookConstructor("org.json.JSONObject", lpparam.classLoader, String.class, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    String jsonString = (String) param.args[0];
+                    if (jsonString != null && jsonString.contains("BULLET_FIRE_RATE")) {
+                        XposedBridge.log("ShootingWarHook: Phát hiện dữ liệu API /api/app/param trong Constructor!");
+                        
+                        JSONObject json = new JSONObject(jsonString);
+                        modifyJson(json);
+                        
+                        // Ghi đè tham số đầu vào của Constructor
+                        param.args[0] = json.toString();
+                        XposedBridge.log("ShootingWarHook: Đã sửa đổi dữ liệu đầu vào thành công.");
+                    }
+                }
+            });
+        } catch (Exception e) {
+            XposedBridge.log("ShootingWarHook: Lỗi khi hook Constructor JSONObject: " + e.getMessage());
+        }
+
+        // Kỹ thuật 2: Hook vào toString của JSONObject (Dự phòng nếu game sử dụng lại object cũ)
         try {
             findAndHookMethod("org.json.JSONObject", lpparam.classLoader, "toString", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     String result = (String) param.getResult();
-                    if (result != null && result.contains("BULLET_FIRE_RATE") && result.contains("BULLET_DAMAGE")) {
-                        XposedBridge.log("ShootingWarHook: Found target JSON response, modifying...");
-                        JSONObject json = new JSONObject(result);
+                    if (result != null && result.contains("BULLET_FIRE_RATE")) {
+                        XposedBridge.log("ShootingWarHook: Phát hiện dữ liệu API trong toString()!");
                         
-                        // Buffing stats as requested
-                        json.put("BULLET_DAMAGE", 500);
-                        json.put("BULLET_FIRE_RATE", 0.01);
-                        json.put("SKILL_ITEM_MAX", 99);
-                        json.put("ENEMY_SPAWN_RATE", 0.05);
+                        JSONObject json = new JSONObject(result);
+                        modifyJson(json);
                         
                         param.setResult(json.toString());
-                        XposedBridge.log("ShootingWarHook: Modified JSON: " + json.toString());
+                        XposedBridge.log("ShootingWarHook: Đã sửa đổi kết quả toString() thành công.");
                     }
                 }
             });
         } catch (Exception e) {
-            XposedBridge.log("ShootingWarHook: Error hooking JSONObject: " + e.getMessage());
+            XposedBridge.log("ShootingWarHook: Lỗi khi hook toString JSONObject: " + e.getMessage());
         }
+    }
 
-        // Alternative: Hook WebView's shouldInterceptRequest or similar if it is a pure H5 game
+    private void modifyJson(JSONObject json) {
         try {
-            findAndHookMethod("android.webkit.WebViewClient", lpparam.classLoader, "onPageFinished", 
-                "android.webkit.WebView", "java.lang.String", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    String url = (String) param.args[1];
-                    if (url != null && url.contains(TARGET_HOST)) {
-                        XposedBridge.log("ShootingWarHook: WebView loaded target host: " + url);
-                    }
-                }
-            });
+            json.put("BULLET_DAMAGE", 500);
+            json.put("BULLET_FIRE_RATE", 0.01);
+            json.put("SKILL_ITEM_MAX", 99);
+            json.put("ENEMY_SPAWN_RATE", 0.05);
+            
+            // Log chi tiết để người dùng kiểm tra trong LSPosed Manager
+            XposedBridge.log("ShootingWarHook: [BUFF] DAMAGE=500, RATE=0.01, SKILL=99, SPAWN=0.05");
         } catch (Exception e) {
-            // Ignore if class not found
+            XposedBridge.log("ShootingWarHook: Lỗi khi thực hiện buff: " + e.getMessage());
         }
     }
 }
